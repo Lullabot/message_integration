@@ -11,20 +11,6 @@ Custom code for Message stack and Swiftmailer to create messages about
 - [Mailsystem](https://www.drupal.org/project/mailsystem)
 - [Swiftmailer](https://www.drupal.org/project/swiftmailer)
 
-**Note: Several patches to Message Subscribe are required.**
-
-Add the following to your composer.json to add necessary patches:
-
-```
-       "patches": {
-            "drupal/message_subscribe": {
-                "Issue #2928789: Fatal exception with flag module": "https://www.drupal.org/files/issues/2019-12-15/account_id_2928789_0.patch",
-                "Issue #3101137: Fix endless loop": "https://www.drupal.org/files/issues/2019-12-15/3101137-fix-endless-loop.patch,
-                "Issue #3101141: Message Subscribe Email removes all emails": "https://www.drupal.org/files/issues/2019-12-15/3101141-check-email-flag_0.patch"
-            }
-       },
-```
-
 
 ## To use:
 
