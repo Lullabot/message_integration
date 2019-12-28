@@ -1,0 +1,281 @@
+<?php
+
+/**
+ * @file
+ * Holds hook implementation for the Custom Message Integration module.
+ */
+
+use Drupal\Core\Entity\ContentEntityBase;
+use Drupal\node\Entity\Node;
+use Drupal\comment\Entity\Comment;
+use Drupal\user\Entity\User;
+use Drupal\message\Entity\Message;
+use Drupal\message_subscribe\Subscribers\DeliveryCandidate;
+use Drupal\Core\Asset\AttachedAssets;
+use TijsVerkoyen\CssToInlineStyles\CssToInlineStyles;
+
+/**
+ * Implements hook_swiftmailer_alter().
+ */
+function message_integration_swiftmailer_alter(Swift_Mailer &$swiftMailer, Swift_Message &$swiftMessage, $message) {
+
+  // Mail and Swiftmail ignore libraries when rendering messages. Our messages
+  // represent nodes and comments, and we need libraries for the HTML messages
+  // to look right. So we identify some css libraries and attach them here.
+  $render = [
+    '#attached' => [
+      'library' => [
+        'core/normalize',
+        'basis/global-styling',
+        'basis_dr/global-styling',
+        'basis_mail/global-styling',
+      ],
+    ],
+  ];
+  $assets = AttachedAssets::createFromRenderArray($render);
+
+  // For email we don't want linked css files in the HEAD of the page, we
+  // want css to be inlined into the body. So we construct a single string of
+  // css, then use CssToInlineStyles() to render that css inline in the text.
+  $assetResolver = \Drupal::service('asset.resolver');
+  $fileSystem = \Drupal::service('file_system');
+
+  $css = '';
+  foreach ($assetResolver->getCssAssets($assets, FALSE) as $css_asset) {
+    $css .= file_get_contents($fileSystem->realpath($css_asset['data']));
+  }
+
+  $text = $swiftMessage->getBody();
+  if ($css) {
+    $text = (new CssToInlineStyles())->convert($text, $css);
+    $swiftMessage->setBody($text);
+  }
+}
+
+/**
+ * Implements hook_preprocess_field().
+ */
+function message_integration_preprocess_field(&$variables) {
+  // When rendering comments in the message view mode, hide the new comment
+  // form.
+  $element = $variables['element'];
+  if ($element['#field_type'] == 'comment') {
+    if ($variables['element']['#view_mode'] == 'message') {
+      unset($variables['comment_form']);
+    }
+  }
+}
+
+/**
+ * Implements hook_message_subscribe_get_subscribers_alter().
+ */
+function message_integration_message_subscribe_get_subscribers_alter(array &$uids, array $values) {
+
+  // Update each subscriber to use the only available delivery method, email.
+  // This is an easier alternative to using the message_subscribe_email module
+  // which requires every user to set both a 'subscribe' flag and also an
+  // 'email' flag on each item they want to subscribe to.
+  foreach ($uids as $uid => $delivery_candidate) {
+    $delivery_candidate->addNotifier('email');
+  }
+
+  return $uids;
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function message_integration_node_insert(Node $node) {
+  $notifier = \Drupal::service('message_notify.sender');
+  $subscribers = \Drupal::service('message_subscribe.subscribers');
+
+  // Automatically subscribe all active users to new content. They can
+  // unsubscribe later if they want to. This is one work-around to the
+  // fact that nobody can subscribe to content until it's published, so they
+  // won't otherwise get notified about new content.
+  if (in_array($node->bundle(), ['blog', 'book', 'book_page', 'yammer'])) {
+    // Find all active users.
+    $query = \Drupal::entityQuery('user')
+      ->condition('status', 1);
+    $uids = $query->execute();
+    $users = User::loadMultiple($uids);
+
+    // Add a content subscription flag for each user.
+    // If there are a lot of users this should probably be queued, which would
+    // require more custom code. For now we'll assume the list is a manageable
+    // size.
+    $flag_service = \Drupal::service('flag');
+    foreach ($users as $account) {
+      $flag_id = 'subscribe_node';
+      $flag = $flag_service->getFlagById($flag_id);
+      // Check if already flagged to avoid exception error.
+      $flagging = $flag_service->getFlagging($flag, $node, $account);
+      if (!$flagging) {
+        $flag_service->flag($flag, $node, $account);
+      }
+    }
+  }
+
+  // Create a message.
+  $template = $node->isPublished() ? 'publish_node' : 'create_node';
+  $message = Message::create(['template' => $template, 'uid' => $node->getOwnerId()]);
+  $message->set('field_node_reference', $node);
+  $message->set('field_published', $node->isPublished());
+  $message->save();
+
+  if (!$node->isPublished()) {
+    // Notify just administrators about new content.
+    $subscribe_options = message_integration_subscriber_list_by_roles(['admin']);
+    $subscribers->sendMessage($node, $message, [], $subscribe_options);
+
+    // Do nothing more for unpublished nodes.
+    return;
+  }
+
+  // Queue messages to notify all the node subscribers about published node.
+  $subscribers->sendMessage($node, $message);
+
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function message_integration_node_update(Node $node) {
+  $notifier = \Drupal::service('message_notify.sender');
+  $subscribers = \Drupal::service('message_subscribe.subscribers');
+
+  // Match publication status of message to status of source entity.
+  message_integration_update_message_status($node);
+
+  // Create a message.
+  // See if this is a newly-published node.
+  if ($node->isPublished() && !empty($node->original) && !$node->original->isPublished()) {
+    $template = 'publish_node';
+  }
+  else {
+    $template = 'update_node';
+  }
+  $message = Message::create([
+    'template' => $template,
+    'uid' => $node->getOwnerId(),
+  ]);
+  $message->set('field_node_reference', $node);
+  $message->set('field_published', $node->isPublished());
+  $message->save();
+
+  if (!$node->isPublished()) {
+    // Immediately notify message creator (node author) about update.
+    // This is probably most interesting if someone else updated it.
+    $notifier->send($message, [], 'email');
+
+    // Do nothing more for unpublished node.
+    return;
+  }
+
+  // Queue messages to the regular node subscribers about changes in published
+  // nodes.
+  $subscribers->sendMessage($node, $message);
+
+}
+
+/**
+ * Implements hook_comment_insert().
+ */
+function message_integration_comment_insert(Comment $comment) {
+  $notifier = \Drupal::service('message_notify.sender');
+  $subscribers = \Drupal::service('message_subscribe.subscribers');
+
+  // Create a message.
+  $node = $comment->get('entity_id')->first()->get('entity')->getTarget()->getValue();
+  $message = Message::create([
+    'template' => 'create_comment',
+    'uid' => $node->getOwnerId(),
+  ]);
+  $message->set('field_comment_reference', $comment);
+  $message->set('field_published', $comment->isPublished());
+  $message->save();
+
+  // Immediately notify node author about new comment.
+  $notifier->send($message, [], 'email');
+
+  // Queue messages to notify all the node subscribers about new comment.
+  $subscribers->sendMessage($comment, $message);
+
+}
+
+/**
+ * Implements hook_user_insert().
+ */
+function message_integration_user_insert(User $account) {
+
+  $subscribers = \Drupal::service('message_subscribe.subscribers');
+
+  // Create a custom subscriber list to notify administrators about new users.
+  // This is an end run around the normal flag subscription system since we
+  // don't want to subscribe to users but we do want administrators notified.
+  $subscribe_options = message_integration_subscriber_list_by_roles(['admin']);
+
+  // Queue messages to our custom list of subscribers.
+  $message = Message::create(['template' => 'user_register', 'uid' => $account->id()]);
+  $message->set('field_user', $account);
+  $message->set('field_published', $account->isActive());
+  $message->save();
+  $subscribers->sendMessage($account, $message, [], $subscribe_options);
+
+}
+
+/**
+ * Helper to create custom subscriber list.
+ *
+ * Hard-coding 'uids' in $subscribe_options will cause message_subscribe to
+ * skip other subscribers and send to just this list, so this allows us
+ * to create a custom subscription list.
+ *
+ * @param array $roles
+ *   Array of roles to search for.
+ *
+ * @return array
+ *   Array of subscribe_options to use when sending the message.
+ */
+function message_integration_subscriber_list_by_roles(array $roles = ['admin']) {
+  $query = \Drupal::entityQuery('user')
+    ->condition('status', 1);
+  $query->condition('roles', $roles, 'IN');
+  $admin_uids = $query->execute();
+
+  $notifiers = ['email'];
+  $subscribe_options = [
+    'notify message owner' => FALSE,
+    'uids' => [],
+  ];
+  foreach ($admin_uids as $uid) {
+    $subscribe_options['uids'][$uid] = new DeliveryCandidate([], $notifiers, $uid);
+  }
+  return $subscribe_options;
+}
+
+/**
+ * Set message entity published field when it changes in the related entity.
+ *
+ * @param \Drupal\Core\Entity\ContentEntityBase $entity
+ *   The entity object.
+ */
+function message_integration_update_message_status(ContentEntityBase $entity) {
+
+  if (!empty($entity->original) && $entity->isPublished() == $entity->original->isPublished()) {
+    return;
+  }
+  $query = \Drupal::entityQuery('message');
+  $field = 'field_' . $entity->getEntityType()->id() . '_reference';
+  $query->condition($field . '.target_id', $entity->id());
+
+  $results = $query->execute();
+  if (empty($results)) {
+    return;
+  }
+  $messages = Message::loadMultiple($results);
+  foreach ($messages as $message) {
+    $message->set('field_published', $entity->isPublished());
+    $message->save();
+  }
+}

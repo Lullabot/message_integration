@@ -1,0 +1,16 @@
+name: Custom Message Integration
+type: module
+description: "Custom code for Message stack and Swiftmailer to create messages about new/changed nodes and comments and email them to subscribers."
+core: 8.x
+package: Message
+dependencies:
+  - message:message
+  - message_ui:message_ui
+  - message_ui:message_notify_ui
+  - message_notify:message_notify
+  - message_subscribe:message_subscribe
+  - message_subscribe:message_subscribe_ui
+  - swiftmailer:swiftmailer
+  - token:token
+  - drupal:node
+  - drupal:comment

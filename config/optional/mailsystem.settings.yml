@@ -1,0 +1,13 @@
+theme: bartik
+defaults:
+  sender: swiftmailer
+  formatter: swiftmailer
+modules:
+  swiftmailer:
+    none:
+      formatter: swiftmailer
+      sender: swiftmailer
+  message_notify:
+    none:
+      formatter: swiftmailer
+      sender: swiftmailer
