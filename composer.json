@@ -7,7 +7,6 @@
     "require": {
         "drupal/core": "^8.6",
         "drupal/message": "^1.0",
-        "drupal/message_digest": "^1.0@RC",
         "drupal/message_notify": "^1.1",
         "drupal/message_subscribe": "^1.0",
         "drupal/message_ui": "^1.0@beta",
