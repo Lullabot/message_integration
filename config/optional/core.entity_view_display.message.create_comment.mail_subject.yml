@@ -9,7 +9,7 @@ dependencies:
     - message.template.create_comment
   module:
     - user
-third_party_settings: {.  }
+third_party_settings: {  }
 id: message.create_comment.mail_subject
 targetEntityType: message
 bundle: create_comment
