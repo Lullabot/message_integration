@@ -6,10 +6,10 @@ label: 'Update Node'
 description: 'Node was updated.'
 text:
   -
-    value: "[message:field_node_reference:entity:title] updated\r\n"
+    value: "[message:field_node_reference:entity:content-type:name]: [message:field_node_reference:entity:title] updated\r\n"
     format: plain_text
   -
-    value: "<h2>[message:field_node_reference:entity:content-type:name] updated</h2>\r\n\r\n<p>[message:render-node:message]</p>\r\n"
+    value: "<h2>[message:field_node_reference:entity:content-type:name]: [message:field_node_reference:entity:title] updated</h2>\r\n\r\n<p><a href=\"[message:field_node_reference:entity:url]\">[message:field_node_reference:entity:title]</a></p>\r\n\r\n<p>[message:node-diff]</p>\r\n"
     format: basic_html
 settings:
   'token options':

@@ -6,10 +6,10 @@ label: 'Create comment'
 description: 'Comment created.'
 text:
   -
-    value: "[message:field_comment_reference:entity:author] commented on [message:field_comment_reference:entity:entity:title]\r\n"
+    value: "[message:field_comment_reference:entity:author] commented on [message:field_comment_reference:entity:entity:content-type:name]: [message:field_comment_reference:entity:entity:title]\r\n"
     format: plain_text
   -
-    value: "<h2>New comment on [message:field_comment_reference:entity:entity:title]</h2>\r\n\r\n<p>Comment by:&nbsp;[message:field_comment_reference:entity:author]&nbsp;<br />\r\nComment:&nbsp;[message:field_comment_reference:entity:body]<br />\r\nUrl:&nbsp;<a href='[message:field_comment_reference:entity:entity:url]'>[message:field_comment_reference:entity:entity:url]</a><br />\r\nTimestamp:&nbsp;[message:field_comment_reference:entity:created]</p>\r\n"
+    value: "<h2>New comment on [message:field_comment_reference:entity:entity:content-type:name]: [message:field_comment_reference:entity:entity:title]</h2>\r\n\r\n<p>[message:render-node:compact]</p>\r\n\r\n<p>[message:render-comment]</p>\r\n"
     format: basic_html
 settings:
   'token options':

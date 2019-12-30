@@ -1,0 +1,22 @@
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.message.field_original_vid
+    - message.template.update_node
+id: message.update_node.field_original_vid
+field_name: field_original_vid
+entity_type: message
+bundle: update_node
+label: 'Original vid'
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  min: null
+  max: null
+  prefix: ''
+  suffix: ''
+field_type: integer

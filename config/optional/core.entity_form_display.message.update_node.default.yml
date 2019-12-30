@@ -2,7 +2,9 @@ langcode: en
 status: true
 dependencies:
   config:
+    - field.field.message.update_node.field_new_vid
     - field.field.message.update_node.field_node_reference
+    - field.field.message.update_node.field_original_vid
     - field.field.message.update_node.field_published
     - message.template.update_node
 id: message.update_node.default
@@ -16,6 +18,13 @@ content:
     region: content
     settings: {  }
     third_party_settings: {  }
+  field_new_vid:
+    weight: 4
+    settings:
+      placeholder: ''
+    third_party_settings: {  }
+    type: number
+    region: content
   field_node_reference:
     weight: 2
     settings:
@@ -25,6 +34,13 @@ content:
       placeholder: ''
     third_party_settings: {  }
     type: entity_reference_autocomplete
+    region: content
+  field_original_vid:
+    weight: 3
+    settings:
+      placeholder: ''
+    third_party_settings: {  }
+    type: number
     region: content
   uid:
     type: entity_reference_autocomplete

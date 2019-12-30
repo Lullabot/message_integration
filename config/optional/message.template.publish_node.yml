@@ -6,10 +6,10 @@ label: 'Publish node'
 description: 'Node was published.'
 text:
   -
-    value: '[message:field_node_reference:entity:title] published'
+    value: '[message:field_node_reference:entity:content-type:name]: [message:field_node_reference:entity:title] published'
     format: plain_text
   -
-    value: "<h2>[message:field_node_reference:entity:content-type:name] published</h2>\r\n\r\n<p>[message:render-node:message]</p>\r\n\r\n"
+    value: "<h2>[message:field_node_reference:entity:content-type:name]: [message:field_node_reference:entity:title] published</h2>\r\n\r\n<p><a href=\"[message:field_node_reference:entity:url]\">[message:field_node_reference:entity:title]</a></p>\r\n\r\n<p>[message:render-node:message]</p>\r\n"
     format: basic_html
 settings:
   'token options':

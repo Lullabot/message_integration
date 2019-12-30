@@ -3,7 +3,9 @@ status: true
 dependencies:
   config:
     - core.entity_view_mode.message.mail_body
+    - field.field.message.update_node.field_new_vid
     - field.field.message.update_node.field_node_reference
+    - field.field.message.update_node.field_original_vid
     - field.field.message.update_node.field_published
     - message.template.update_node
   module:
@@ -14,8 +16,26 @@ targetEntityType: message
 bundle: update_node
 mode: mail_body
 content:
-  partial_1:
+  field_new_vid:
+    type: number_integer
+    weight: 1
+    region: content
+    label: above
+    settings:
+      thousand_separator: ''
+      prefix_suffix: true
+    third_party_settings: {  }
+  field_original_vid:
+    type: number_integer
     weight: 0
+    region: content
+    label: above
+    settings:
+      thousand_separator: ''
+      prefix_suffix: true
+    third_party_settings: {  }
+  partial_1:
+    weight: 2
     region: content
     settings: {  }
     third_party_settings: {  }

@@ -3,11 +3,13 @@ status: true
 dependencies:
   config:
     - core.entity_view_mode.message.mail_subject
+    - field.field.message.update_node.field_new_vid
     - field.field.message.update_node.field_node_reference
+    - field.field.message.update_node.field_original_vid
     - field.field.message.update_node.field_published
     - message.template.update_node
   module:
-     - user
+    - user
 third_party_settings: {  }
 id: message.update_node.mail_subject
 targetEntityType: message
@@ -18,6 +20,8 @@ content:
     weight: 0
     region: content
 hidden:
+  field_new_vid: true
   field_node_reference: true
+  field_original_vid: true
   field_published: true
   partial_1: true

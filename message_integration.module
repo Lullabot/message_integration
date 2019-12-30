@@ -15,49 +15,97 @@ use Drupal\Core\Asset\AttachedAssets;
 use TijsVerkoyen\CssToInlineStyles\CssToInlineStyles;
 
 /**
+ * Get css for the mailed messages.
+ *
+ * CSS is the same for all messages, so use static cache.
+ *
+ * @return string
+ *   A string containing an aggregate of all css on all mail-related libraries.
+ */
+function message_integration_css() {
+  // Instatiate the static
+  $css = &drupal_static(__FUNCTION__);
+
+  // Check if the value has already been set in this page load
+  if (!isset($css)) {
+    $css = '';
+
+    // Mail and Swiftmail ignore libraries when rendering messages. Our messages
+    // represent nodes and comments, and we need libraries for the HTML messages
+    // to look right. So we identify css libraries needed for email and attach
+    // them here.
+    $assets = AttachedAssets::createFromRenderArray([
+      '#attached' => [
+        'library' => [
+          'core/normalize',
+          'basis/global-styling',
+          'basis_dr/global-styling',
+          'basis_mail/global-styling',
+          'diff/diff.single_column',
+          'diff/diff.colors',
+          'diff/diff.general',
+        ],
+      ],
+    ]);
+
+    $assetResolver = \Drupal::service('asset.resolver');
+    $fileSystem = \Drupal::service('file_system');
+    foreach ($assetResolver->getCssAssets($assets, FALSE) as $css_asset) {
+      $css .= file_get_contents($fileSystem->realpath($css_asset['data']));
+    }
+  }
+  return $css;
+}
+
+/**
+ * Add inline styles to message.
+ *
+ * The same message can be sent repeatedly, so use static cache.
+ *
+ * @param string $id
+ *   The message unique id.
+ * @param string $text
+ *   The text of the message.
+ *
+ * @return string
+ *   The message with inline css added.
+ */
+function message_integration_message_with_css($id, $text) {
+  // Instatiate the static
+  $message_with_css = &drupal_static(__FUNCTION__, []);
+
+  // Check if the value has already been set in this page load
+  if (!isset($message_with_css[$id])) {
+    // For email we don't want linked css files in the HEAD of the page, we
+    // want css to be inlined into the body. So we construct a single string of
+    // css, then use CssToInlineStyles() to render that css inline in the text.
+    $css = message_integration_css();
+    if ($css) {
+      $message_with_css[$id] = (new CssToInlineStyles())->convert($text, $css);
+    }
+  }
+  return $message_with_css[$id];
+}
+
+/**
  * Implements hook_swiftmailer_alter().
  */
 function message_integration_swiftmailer_alter(Swift_Mailer &$swiftMailer, Swift_Message &$swiftMessage, $message) {
-
-  // Mail and Swiftmail ignore libraries when rendering messages. Our messages
-  // represent nodes and comments, and we need libraries for the HTML messages
-  // to look right. So we identify some css libraries and attach them here.
-  $render = [
-    '#attached' => [
-      'library' => [
-        'core/normalize',
-        'basis/global-styling',
-        'basis_dr/global-styling',
-        'basis_mail/global-styling',
-      ],
-    ],
-  ];
-  $assets = AttachedAssets::createFromRenderArray($render);
-
-  // For email we don't want linked css files in the HEAD of the page, we
-  // want css to be inlined into the body. So we construct a single string of
-  // css, then use CssToInlineStyles() to render that css inline in the text.
-  $assetResolver = \Drupal::service('asset.resolver');
-  $fileSystem = \Drupal::service('file_system');
-
-  $css = '';
-  foreach ($assetResolver->getCssAssets($assets, FALSE) as $css_asset) {
-    $css .= file_get_contents($fileSystem->realpath($css_asset['data']));
-  }
-
+  // Add css to emails from Drupal libraries.
+  // This gets called for every email sent to everyone on subscriber list, so
+  // take advantage of drupal_static for better performance when sending the
+  // same message over and over.
   $text = $swiftMessage->getBody();
-  if ($css) {
-    $text = (new CssToInlineStyles())->convert($text, $css);
-    $swiftMessage->setBody($text);
-  }
+  $text = message_integration_message_with_css($message['#id'], $text);
+  $swiftMessage->setBody($text);
 }
 
 /**
  * Implements hook_preprocess_field().
  */
 function message_integration_preprocess_field(&$variables) {
-  // When rendering comments in the message view mode, hide the new comment
-  // form.
+  // When rendering comments in the `message` view mode used for email, hide
+  // the new comment form.
   $element = $variables['element'];
   if ($element['#field_type'] == 'comment') {
     if ($variables['element']['#view_mode'] == 'message') {
@@ -70,7 +118,6 @@ function message_integration_preprocess_field(&$variables) {
  * Implements hook_message_subscribe_get_subscribers_alter().
  */
 function message_integration_message_subscribe_get_subscribers_alter(array &$uids, array $values) {
-
   // Update each subscriber to use the only available delivery method, email.
   // This is an easier alternative to using the message_subscribe_email module
   // which requires every user to set both a 'subscribe' flag and also an
@@ -78,7 +125,6 @@ function message_integration_message_subscribe_get_subscribers_alter(array &$uid
   foreach ($uids as $uid => $delivery_candidate) {
     $delivery_candidate->addNotifier('email');
   }
-
   return $uids;
 }
 
@@ -86,13 +132,14 @@ function message_integration_message_subscribe_get_subscribers_alter(array &$uid
  * Implements hook_node_insert().
  */
 function message_integration_node_insert(Node $node) {
-  $notifier = \Drupal::service('message_notify.sender');
   $subscribers = \Drupal::service('message_subscribe.subscribers');
 
   // Automatically subscribe all active users to new content. They can
-  // unsubscribe later if they want to. This is one work-around to the
-  // fact that nobody can subscribe to content until it's published, so they
-  // won't otherwise get notified about new content.
+  // unsubscribe later if they want to. This is one work-around to the fact
+  // that nobody can subscribe to content until it's published, so they won't
+  // otherwise get notified about new content. If a user account is later
+  // blocked, all flags will be removed by Flag module, so it's safe to set
+  // flags here for all currently active users.
   if (in_array($node->bundle(), ['blog', 'book', 'book_page', 'yammer'])) {
     // Find all active users.
     $query = \Drupal::entityQuery('user')
@@ -105,9 +152,9 @@ function message_integration_node_insert(Node $node) {
     // require more custom code. For now we'll assume the list is a manageable
     // size.
     $flag_service = \Drupal::service('flag');
+    $flag_id = 'subscribe_node';
+    $flag = $flag_service->getFlagById($flag_id);
     foreach ($users as $account) {
-      $flag_id = 'subscribe_node';
-      $flag = $flag_service->getFlagById($flag_id);
       // Check if already flagged to avoid exception error.
       $flagging = $flag_service->getFlagging($flag, $node, $account);
       if (!$flagging) {
@@ -123,17 +170,10 @@ function message_integration_node_insert(Node $node) {
   $message->set('field_published', $node->isPublished());
   $message->save();
 
-  if (!$node->isPublished()) {
-    // Notify just administrators about new content.
-    $subscribe_options = message_integration_subscriber_list_by_roles(['admin']);
-    $subscribers->sendMessage($node, $message, [], $subscribe_options);
-
-    // Do nothing more for unpublished nodes.
-    return;
-  }
-
   // Queue messages to notify all the node subscribers about published node.
-  $subscribers->sendMessage($node, $message);
+  if ($node->isPublished()) {
+    $subscribers->sendMessage($node, $message);
+  }
 
 }
 
@@ -141,7 +181,6 @@ function message_integration_node_insert(Node $node) {
  * Implements hook_node_update().
  */
 function message_integration_node_update(Node $node) {
-  $notifier = \Drupal::service('message_notify.sender');
   $subscribers = \Drupal::service('message_subscribe.subscribers');
 
   // Match publication status of message to status of source entity.
@@ -155,26 +194,35 @@ function message_integration_node_update(Node $node) {
   else {
     $template = 'update_node';
   }
+
   $message = Message::create([
     'template' => $template,
     'uid' => $node->getOwnerId(),
   ]);
   $message->set('field_node_reference', $node);
   $message->set('field_published', $node->isPublished());
+
+  // Store original and current vids, so the right diff can be shown in the
+  // node-diff token.
+  if ($message->hasField('field_new_vid')) {
+    $message->set('field_new_vid', $node->vid->value);
+  }
+  if ($message->hasField('field_original_vid')) {
+    if (!empty($node->original)) {
+      $message->set('field_original_vid', $node->original->vid->value);
+    }
+    else {
+      $message->set('field_original_vid', $node->vid->value);
+    }
+  }
   $message->save();
 
-  if (!$node->isPublished()) {
-    // Immediately notify message creator (node author) about update.
-    // This is probably most interesting if someone else updated it.
-    $notifier->send($message, [], 'email');
-
-    // Do nothing more for unpublished node.
-    return;
+  // If node is newly published or change is a new revision of a published node
+  // send messages. Otherwise don't bother subscribers with emails.
+  $new_revision = isset($node->original) && $node->original->vid->value != $node->vid->value;
+  if ($template == 'publish_node' || ($node->isPublished() && $new_revision)) {
+    $subscribers->sendMessage($node, $message);
   }
-
-  // Queue messages to the regular node subscribers about changes in published
-  // nodes.
-  $subscribers->sendMessage($node, $message);
 
 }
 
@@ -182,7 +230,6 @@ function message_integration_node_update(Node $node) {
  * Implements hook_comment_insert().
  */
 function message_integration_comment_insert(Comment $comment) {
-  $notifier = \Drupal::service('message_notify.sender');
   $subscribers = \Drupal::service('message_subscribe.subscribers');
 
   // Create a message.
@@ -195,9 +242,6 @@ function message_integration_comment_insert(Comment $comment) {
   $message->set('field_published', $comment->isPublished());
   $message->save();
 
-  // Immediately notify node author about new comment.
-  $notifier->send($message, [], 'email');
-
   // Queue messages to notify all the node subscribers about new comment.
   $subscribers->sendMessage($comment, $message);
 
@@ -207,7 +251,6 @@ function message_integration_comment_insert(Comment $comment) {
  * Implements hook_user_insert().
  */
 function message_integration_user_insert(User $account) {
-
   $subscribers = \Drupal::service('message_subscribe.subscribers');
 
   // Create a custom subscriber list to notify administrators about new users.
@@ -220,8 +263,8 @@ function message_integration_user_insert(User $account) {
   $message->set('field_user', $account);
   $message->set('field_published', $account->isActive());
   $message->save();
-  $subscribers->sendMessage($account, $message, [], $subscribe_options);
 
+  $subscribers->sendMessage($account, $message, [], $subscribe_options);
 }
 
 /**

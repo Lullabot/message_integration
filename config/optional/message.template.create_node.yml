@@ -6,10 +6,10 @@ label: 'Create node'
 description: 'Node was created.'
 text:
   -
-    value: "[message:field_node_reference:entity:title] created [message:field_node_reference:entity:content-type:name]\r\n"
+    value: "[message:field_node_reference:entity:content-type:name]: [message:field_node_reference:entity:title] created\r\n"
     format: plain_text
   -
-    value: "<h2>[message:field_node_reference:entity:content-type:name] created</h2>\r\n\r\n<p>[message:render-node:message]</p>\r\n\r\n"
+    value: "<h2>[message:field_node_reference:entity:content-type:name]: [message:field_node_reference:entity:title] created</h2>\r\n\r\n<p><a href=\"[message:field_node_reference:entity:url]\">[message:field_node_reference:entity:title]</a></p>\r\n\r\n<p>[message:render-node:message]</p>\r\n"
     format: basic_html
 settings:
   'token options':
