@@ -12,6 +12,7 @@ dependencies:
   - message_subscribe:message_subscribe_ui
   - diff:diff
   - swiftmailer:swiftmailer
+  - mailsystem:mailsystem
   - token:token
   - drupal:node
   - drupal:comment
