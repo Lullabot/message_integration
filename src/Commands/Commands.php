@@ -6,11 +6,10 @@ use Drush\Commands\DrushCommands;
 use Drupal\node\Entity\Node;
 
 /**
- * For commands that are parts of modules, Drush expects to find commandfiles in
- * __MODULE__/src/Commands, and the namespace is Drupal/__MODULE__/Commands.
+ * Drush commands.
  *
- * In addition to a commandfile like this one, you need to add a drush.services.yml
- * in root of your module like this module does.
+ * In addition to a commandfile like this one, you need to add a
+ * drush.services.yml in root of your module like this module does.
  */
 class Commands extends DrushCommands {
 
@@ -35,6 +34,8 @@ class Commands extends DrushCommands {
   }
 
   /**
+   * Configuration update.
+   *
    * Set configuration that can't be fixed in update hook when modules are all
    * installed at once.
    */
@@ -53,9 +54,9 @@ class Commands extends DrushCommands {
     $settings->set('modules', [
       'swiftmailer' => [
         'none' => [
-           'formatter' => 'swiftmailer',
-           'sender' => 'swiftmailer',
-         ],
+          'formatter' => 'swiftmailer',
+          'sender' => 'swiftmailer',
+        ],
       ],
       'message_notify' => [
         'none' => [
@@ -97,6 +98,8 @@ class Commands extends DrushCommands {
   }
 
   /**
+   * Author update.
+   *
    * This won't work until all the above configuration has been set. Make sure
    * every author is subscribed to all their existing content.
    */
