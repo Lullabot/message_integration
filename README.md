@@ -31,11 +31,6 @@ The logic used for subscribing users to content and sending them emails
 - Admin users will be notified by email when new users register, using a custom
  mailing list instead of the usual subscription model.
 
-Test emails in a local development environment using the enclosed Lando file.
- Install and start [Lando](https://docs.lando.dev/) as usual, then visit
- `http://dr.lndo.site/` to create, subscribe to, and edit content, and
-  `http://dr.mail.lndo.site/` to see the emails that are sent.
-
 ## To install on a new site:
 
 This code is too opinionated to use as a normal contributed module. But you

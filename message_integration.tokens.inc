@@ -127,7 +127,7 @@ function message_integration_tokens($type, $tokens, array $data = [], array $opt
  *   The type of comparison, options include:
  *     - 'unified_fields'
  *     - 'split_fields'
- *     - 'visual_inline'
+ *     - 'visual_inline'.
  *
  * @return array
  *   A render array of the diff between the nodes.
