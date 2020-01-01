@@ -57,17 +57,10 @@ To use this on your own site, fork this code, then add the forked repository
 - Make sure all the required code (with patches) is available by running
  `composer require forked-repo/message_integration`.
 - Enable this module, which will install all the other required modules:
- `drush en message_implementation`
-- Navigate to `admin/config/message/message-subscribe` to configure subscription
- settings. Be sure to check the option to queue messages so they are sent
- only on cron.
-- Navigate to `admin/config/mailsystem` to adjust mail settings. Be sure
- Swiftmailer is set as the formatter and sender for the Message Notify module
- in mailsystem settings.
-- Navigate to `admin/config/swiftmailer` and choose to use the `HTML` format
- and uncheck `Respect provided e-mail format`, which would revert everything
- to plain text if checked.
-- Navigate to `admin/structure/message` to edit and change message templates.
+ `drush en message_integration`
+- Lots of tweaky little steps can't be done until after everything is
+ installed. Do them by running `drush message_integration:configure` after
+ enabling the modules.
 - Edit the display mode for each content type to position the subscription flag
  where you want it on the `default` view mode of your content nodes, then
  enable the `message` view mode to control the display that will be rendered
@@ -76,6 +69,7 @@ To use this on your own site, fork this code, then add the forked repository
 - Create/edit content and add comments to it.
 - Run cron to trigger queued messages and emails.
 - Navigate to `admin/content/messages` to see the generated messages.
+- Navigate to `admin/structure/message` to edit and change message templates.
 
 Review the code in `message_implementation.module` to see what hooks are being
  used to generate messages. You can alter them as needed. You'll also want to

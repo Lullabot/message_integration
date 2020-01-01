@@ -1,0 +1,5 @@
+services:
+  message_integration.command:
+    class: Drupal\message_integration\Commands\Commands
+    tags:
+      -  { name: drush.command }
