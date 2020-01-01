@@ -8,12 +8,12 @@
 use Drupal\node\Entity\Node;
 
 /**
-  * Implements hook_install().
-  */
+ * Implements hook_install().
+ */
 function message_integration_install() {
 
   $moduleHandler = \Drupal::service('module_handler');
-  if (!$moduleHandler->moduleExists('flag'))  {
+  if (!$moduleHandler->moduleExists('flag')) {
     return;
   }
 

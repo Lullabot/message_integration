@@ -23,10 +23,9 @@ use TijsVerkoyen\CssToInlineStyles\CssToInlineStyles;
  *   A string containing an aggregate of all css on all mail-related libraries.
  */
 function message_integration_css() {
-  // Instatiate the static
   $css = &drupal_static(__FUNCTION__);
 
-  // Check if the value has already been set in this page load
+  // Check if the value has already been set in this page load.
   if (!isset($css)) {
     $css = '';
 
@@ -71,10 +70,9 @@ function message_integration_css() {
  *   The message with inline css added.
  */
 function message_integration_message_with_css($id, $text) {
-  // Instatiate the static
   $message_with_css = &drupal_static(__FUNCTION__, []);
 
-  // Check if the value has already been set in this page load
+  // Check if the value has already been set in this page load.
   if (!isset($message_with_css[$id])) {
     // For email we don't want linked css files in the HEAD of the page, we
     // want css to be inlined into the body. So we construct a single string of

@@ -7,6 +7,7 @@
 
 use Drupal\diff\Controller\NodeRevisionController;
 use Drupal\Core\Routing\RouteMatch;
+use Drupal\node\Entity\Node;
 
 /**
  * Implements hook_token_info().
@@ -116,13 +117,13 @@ function message_integration_tokens($type, $tokens, array $data = [], array $opt
 /**
  * Helper to show diff between two nodes.
  *
- * @param $node
+ * @param \Drupal\node\Entity\Node $node
  *   The latest node.
- * @param $original_vid
+ * @param int $original_vid
  *   The previous vid.
- * @param $new_vid
+ * @param int $new_vid
  *   The newer vid.
- * @param $filter
+ * @param string $filter
  *   The type of comparison, options include:
  *     - 'unified_fields'
  *     - 'split_fields'
@@ -131,7 +132,7 @@ function message_integration_tokens($type, $tokens, array $data = [], array $opt
  * @return array
  *   A render array of the diff between the nodes.
  */
-function message_integration_tokens_node_diff($node, $original_vid, $new_vid, $filter) {
+function message_integration_tokens_node_diff(Node $node, $original_vid, $new_vid, $filter) {
   $diffEntityComparison = \Drupal::service('diff.entity_comparison');
   $diffLayoutManager = \Drupal::service('plugin.manager.diff.layout');
   $requestStack = \Drupal::service('request_stack');
