@@ -121,6 +121,10 @@ class Commands extends DrushCommands {
       if ($account->isBlocked()) {
         continue;
       }
+      // Skip admin and anonymous users.
+      if (in_array($account->id(), [0, 1])) {
+        continue;
+      }
       // Check if already flagged to avoid exception error.
       $flagging = $flag_service->getFlagging($flag, $node, $account);
       if (!$flagging) {

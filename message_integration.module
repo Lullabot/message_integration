@@ -90,12 +90,15 @@ function message_integration_message_with_css($id, $text) {
  */
 function message_integration_swiftmailer_alter(Swift_Mailer &$swiftMailer, Swift_Message &$swiftMessage, $message) {
   // Add css to emails from Drupal libraries.
-  // This gets called for every email sent to everyone on subscriber list, so
-  // take advantage of drupal_static for better performance when sending the
-  // same message over and over.
-  $text = $swiftMessage->getBody();
-  $text = message_integration_message_with_css($message['#id'], $text);
-  $swiftMessage->setBody($text);
+  // This gets called for every individual email sent to everyone on subscriber
+  // list, so take advantage of drupal_static for better performance when
+  // sending the same message over and over.
+  if (!empty($message['params']['message_entity'])) {
+    $message_entity = $message['params']['message_entity'];
+    $text = $swiftMessage->getBody();
+    $text = message_integration_message_with_css($message_entity->id(), $text);
+    $swiftMessage->setBody($text);
+  }
 }
 
 /**
@@ -141,7 +144,8 @@ function message_integration_node_insert(Node $node) {
   if (in_array($node->bundle(), ['blog', 'book', 'book_page', 'yammer'])) {
     // Find all active users.
     $query = \Drupal::entityQuery('user')
-      ->condition('status', 1);
+      ->condition('status', 1)
+      ->condition('uid', [0, 1], 'NOT IN');
     $uids = $query->execute();
     $users = User::loadMultiple($uids);
 
@@ -156,7 +160,8 @@ function message_integration_node_insert(Node $node) {
       // Check if already flagged to avoid exception error.
       $flagging = $flag_service->getFlagging($flag, $node, $account);
       if (!$flagging) {
-        $flag_service->flag($flag, $node, $account);
+        // Unhide this once messages, subscriptions, and emails are working.
+        //$flag_service->flag($flag, $node, $account);
       }
     }
   }
