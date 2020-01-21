@@ -6,6 +6,8 @@
  */
 
 use Drupal\Core\Entity\ContentEntityBase;
+use Drupal\Core\Entity\EntityForm;
+use Drupal\Core\Form\FormStateInterface;
 use Drupal\node\Entity\Node;
 use Drupal\comment\Entity\Comment;
 use Drupal\user\Entity\User;
@@ -15,20 +17,44 @@ use Drupal\Core\Asset\AttachedAssets;
 use TijsVerkoyen\CssToInlineStyles\CssToInlineStyles;
 
 /**
+ * The content types whose changes should generate messages.
+ */
+define('MESSAGE_INTEGRATION_CONTENT_TYPES', ['blog', 'book_page', 'yammer']);
+
+/**
+ * Implemenation of hook_form_BASE_FORM_ID_alter().
+ */
+function message_integration_form_node_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  // Provide a notification message for authors so they know what will happen.
+  $form_object = $form_state->getFormObject();
+  if ($form_object instanceof EntityForm) {
+    $entity = $form_object->getEntity();
+    if (in_array($entity->bundle(), MESSAGE_INTEGRATION_CONTENT_TYPES)) {
+      // Add reminders about which actions will send messages.
+      $form['title']['#suffix'] = '<div class="notification-message">' .
+        t("Message notification is enabled.") . " " .
+        t("Active users will automatically be subscribed to new content, and may choose to unsubscribe at any time.") . " " .
+        t("Subscribers will automatically be notified when content is published, when new revisions are created, and when comments are added.") .
+        '</div>';
+    }
+  }
+}
+
+/**
  * Get css for the mailed messages.
  *
- * CSS is the same for all messages, so use static cache.
+ * CSS is the same for all messages, so cache it.
  *
  * @return string
  *   A string containing an aggregate of all css on all mail-related libraries.
  */
 function message_integration_css() {
-  $css = &drupal_static(__FUNCTION__);
-
-  // Check if the value has already been set in this page load.
-  if (!isset($css)) {
-    $css = '';
-
+  $cid = 'message_integration_css';
+  $css = NULL;
+  if ($cache = \Drupal::cache()->get($cid)) {
+    $css = $cache->data;
+  }
+  else {
     // Mail and Swiftmail ignore libraries when rendering messages. Our messages
     // represent nodes and comments, and we need libraries for the HTML messages
     // to look right. So we identify css libraries needed for email and attach
@@ -52,53 +78,39 @@ function message_integration_css() {
     foreach ($assetResolver->getCssAssets($assets, FALSE) as $css_asset) {
       $css .= file_get_contents($fileSystem->realpath($css_asset['data']));
     }
+    \Drupal::cache()->set($cid, $css);
   }
   return $css;
 }
 
 /**
- * Add inline styles to message.
- *
- * The same message can be sent repeatedly, so use static cache.
- *
- * @param string $id
- *   The message unique id.
- * @param string $text
- *   The text of the message.
- *
- * @return string
- *   The message with inline css added.
+ * Implements hook_message_view_alter().
  */
-function message_integration_message_with_css($id, $text) {
-  $message_with_css = &drupal_static(__FUNCTION__, []);
-
-  // Check if the value has already been set in this page load.
-  if (!isset($message_with_css[$id])) {
-    // For email we don't want linked css files in the HEAD of the page, we
-    // want css to be inlined into the body. So we construct a single string of
-    // css, then use CssToInlineStyles() to render that css inline in the text.
-    $css = message_integration_css();
-    if ($css) {
-      $message_with_css[$id] = (new CssToInlineStyles())->convert($text, $css);
-    }
-  }
-  return $message_with_css[$id];
+function message_integration_message_view_alter(array &$build) {
+  $build['#post_render'][] = 'message_integration_post_render';
 }
 
 /**
- * Implements hook_swiftmailer_alter().
+ * Post render callback.
+ *
+ * @param string $text
+ *   The rendered text.
+ * @param array $context
+ *   Context for the rendered content.
+ *
+ * @return string
+ *   The altered text.
  */
-function message_integration_swiftmailer_alter(Swift_Mailer &$swiftMailer, Swift_Message &$swiftMessage, $message) {
-  // Add css to emails from Drupal libraries.
-  // This gets called for every individual email sent to everyone on subscriber
-  // list, so take advantage of drupal_static for better performance when
-  // sending the same message over and over.
-  if (!empty($message['params']['message_entity'])) {
-    $message_entity = $message['params']['message_entity'];
-    $text = $swiftMessage->getBody();
-    $text = message_integration_message_with_css($message_entity->id(), $text);
-    $swiftMessage->setBody($text);
+function message_integration_post_render($text, array $context) {
+
+  // For email we don't want linked css files in the HEAD of the page, we
+  // want css to be inlined into the body. So we construct a single string of
+  // css, then use CssToInlineStyles() to render that css inline in the markup.
+  if ($css = message_integration_css()) {
+    $text = (new CssToInlineStyles())->convert($text, $css);
   }
+
+  return $text;
 }
 
 /**
@@ -133,6 +145,11 @@ function message_integration_message_subscribe_get_subscribers_alter(array &$uid
  * Implements hook_node_insert().
  */
 function message_integration_node_insert(Node $node) {
+
+  if (!in_array($node->bundle(), MESSAGE_INTEGRATION_CONTENT_TYPES)) {
+    return;
+  }
+
   $subscribers = \Drupal::service('message_subscribe.subscribers');
 
   // Automatically subscribe all active users to new content. They can
@@ -141,28 +158,24 @@ function message_integration_node_insert(Node $node) {
   // otherwise get notified about new content. If a user account is later
   // blocked, all flags will be removed by Flag module, so it's safe to set
   // flags here for all currently active users.
-  if (in_array($node->bundle(), ['blog', 'book', 'book_page', 'yammer'])) {
-    // Find all active users.
-    $query = \Drupal::entityQuery('user')
-      ->condition('status', 1)
-      ->condition('uid', [0, 1], 'NOT IN');
-    $uids = $query->execute();
-    $users = User::loadMultiple($uids);
+  $query = \Drupal::entityQuery('user')
+    ->condition('status', 1)
+    ->condition('uid', [0, 1], 'NOT IN');
+  $uids = $query->execute();
+  $users = User::loadMultiple($uids);
 
-    // Add a content subscription flag for each user.
-    // If there are a lot of users this should probably be queued, which would
-    // require more custom code. For now we'll assume the list is a manageable
-    // size.
-    $flag_service = \Drupal::service('flag');
-    $flag_id = 'subscribe_node';
-    $flag = $flag_service->getFlagById($flag_id);
-    foreach ($users as $account) {
-      // Check if already flagged to avoid exception error.
-      $flagging = $flag_service->getFlagging($flag, $node, $account);
-      if (!$flagging) {
-        // Unhide this once messages, subscriptions, and emails are working.
-        //$flag_service->flag($flag, $node, $account);
-      }
+  // Add a content subscription flag for each user.
+  // If there are a lot of users this should probably be queued, which would
+  // require more custom code. For now we'll assume the list is a manageable
+  // size.
+  $flag_service = \Drupal::service('flag');
+  $flag_id = 'subscribe_node';
+  $flag = $flag_service->getFlagById($flag_id);
+  foreach ($users as $account) {
+    // Check if already flagged to avoid exception error.
+    $flagging = $flag_service->getFlagging($flag, $node, $account);
+    if (!$flagging) {
+      $flag_service->flag($flag, $node, $account);
     }
   }
 
@@ -184,20 +197,44 @@ function message_integration_node_insert(Node $node) {
  * Implements hook_node_update().
  */
 function message_integration_node_update(Node $node) {
+  if (!in_array($node->bundle(), MESSAGE_INTEGRATION_CONTENT_TYPES)) {
+    return;
+  }
+
   $subscribers = \Drupal::service('message_subscribe.subscribers');
 
   // Match publication status of message to status of source entity.
   message_integration_update_message_status($node);
 
-  // Create a message.
   // See if this is a newly-published node.
   if ($node->isPublished() && !empty($node->original) && !$node->original->isPublished()) {
     $template = 'publish_node';
+    $newly_published = TRUE;
   }
   else {
     $template = 'update_node';
+    $newly_published = FALSE;
   }
 
+  // See if this is a new revision and whether anything changed.
+  $langcode = $node->language()->getId();
+  $new_vid = $node->vid->value;
+  if ($node->hasTranslation($langcode) && !$node->getTranslation($langcode)->isRevisionTranslationAffected()) {
+    // If nothing changed, the system won't treat this as a new revision.
+    $original_vid = $new_vid;
+    $new_revision = FALSE;
+  }
+  else {
+    $original_vid = !empty($node->original) ? $node->original->vid->value : $node->vid->value;
+    $new_revision = $original_vid != $new_vid ? TRUE : FALSE;
+  }
+  // If this is a new revision where nothing changed and it wasn't published,
+  // skip message altogether.
+  if (!$new_revision && !$newly_published) {
+    return;
+  }
+
+  // Create a message.
   $message = Message::create([
     'template' => $template,
     'uid' => $node->getOwnerId(),
@@ -208,24 +245,14 @@ function message_integration_node_update(Node $node) {
   // Store original and current vids, so the right diff can be shown in the
   // node-diff token.
   if ($message->hasField('field_new_vid')) {
-    $message->set('field_new_vid', $node->vid->value);
+    $message->set('field_new_vid', $new_vid);
   }
   if ($message->hasField('field_original_vid')) {
-    if (!empty($node->original)) {
-      $message->set('field_original_vid', $node->original->vid->value);
-    }
-    else {
-      $message->set('field_original_vid', $node->vid->value);
-    }
+    $message->set('field_original_vid', $original_vid);
   }
   $message->save();
 
-  // If node is newly published or change is a new revision of a published node
-  // send messages. Otherwise don't bother subscribers with emails.
-  $new_revision = isset($node->original) && $node->original->vid->value != $node->vid->value;
-  if ($template == 'publish_node' || ($node->isPublished() && $new_revision)) {
-    $subscribers->sendMessage($node, $message);
-  }
+  $subscribers->sendMessage($node, $message);
 
 }
 
@@ -235,8 +262,12 @@ function message_integration_node_update(Node $node) {
 function message_integration_comment_insert(Comment $comment) {
   $subscribers = \Drupal::service('message_subscribe.subscribers');
 
-  // Create a message.
   $node = $comment->get('entity_id')->first()->get('entity')->getTarget()->getValue();
+  if (!in_array($node->bundle(), MESSAGE_INTEGRATION_CONTENT_TYPES)) {
+    return;
+  }
+
+  // Create a message.
   $message = Message::create([
     'template' => 'create_comment',
     'uid' => $node->getOwnerId(),

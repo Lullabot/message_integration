@@ -98,9 +98,13 @@ function message_integration_tokens($type, $tokens, array $data = [], array $opt
 
         case 'node-diff':
           if (!empty($node) && !empty($original_vid) && !empty($new_vid)) {
-            $render_array = message_integration_tokens_node_diff($node, $original_vid, $new_vid, 'unified_fields');
-            $text = \Drupal::service('renderer')->renderRoot($render_array);
-            $replacements[$original] = $text;
+            if ($render_array = message_integration_tokens_node_diff($node, $original_vid, $new_vid, 'unified_fields')) {
+              $text = \Drupal::service('renderer')->renderRoot($render_array);
+              $replacements[$original] = $text;
+            }
+            else {
+              $replacements[$original] = t('<span class="warning">There is no difference.</span>');
+            }
           }
           else {
             $replacements[$original] = t('<span class="warning">Unable to display node difference.</span>');
@@ -133,6 +137,10 @@ function message_integration_tokens($type, $tokens, array $data = [], array $opt
  *   A render array of the diff between the nodes.
  */
 function message_integration_tokens_node_diff(Node $node, $original_vid, $new_vid, $filter) {
+
+  if ($original_vid == $new_vid) {
+    return NULL;
+  }
   $diffEntityComparison = \Drupal::service('diff.entity_comparison');
   $diffLayoutManager = \Drupal::service('plugin.manager.diff.layout');
   $requestStack = \Drupal::service('request_stack');
