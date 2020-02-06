@@ -21,7 +21,7 @@
                 "Issue #3101137: Fix endless loop": "https://www.drupal.org/files/issues/2019-12-15/3101137-fix-endless-loop.patch"
             },
             "drupal/message_notify": {
-                "Issue #3111355: Switch user to recipient before rendering": "https://www.drupal.org/files/issues/2020-02-05/3111355-switch-user.patch"
+                "Issue #3111355: Switch user to recipient before rendering": "https://www.drupal.org/files/issues/2020-02-06/3111355-switch-user_5.patch"
             }
         },
         "drush": {
