@@ -68,11 +68,11 @@ class Commands extends DrushCommands {
 
     $settings = $config_factory->getEditable('swiftmailer.message');
     $settings->set('format', 'text/html');
-    $settings->set('respect_format', false);
+    $settings->set('respect_format', FALSE);
     $settings->save(TRUE);
 
     $settings = $config_factory->getEditable('flag.flag.subscribe_node');
-    $settings->set('status', true);
+    $settings->set('status', TRUE);
     $settings->save(TRUE);
 
     $settings = $config_factory->getEditable('user.role.authenticated');
@@ -127,3 +127,4 @@ class Commands extends DrushCommands {
   }
 
 }
+
