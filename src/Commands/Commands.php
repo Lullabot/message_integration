@@ -46,7 +46,6 @@ class Commands extends DrushCommands {
     $settings->save(TRUE);
 
     $settings = $config_factory->getEditable('mailsystem.settings');
-    $settings->set('theme', 'default');
     $settings->set('defaults', [
       'sender' => 'swiftmailer',
       'formatter' => 'swiftmailer',
@@ -69,24 +68,18 @@ class Commands extends DrushCommands {
 
     $settings = $config_factory->getEditable('swiftmailer.message');
     $settings->set('format', 'text/html');
-    $settings->set('respect_format', 'false');
+    $settings->set('respect_format', false);
     $settings->save(TRUE);
 
     $settings = $config_factory->getEditable('flag.flag.subscribe_node');
-    $settings->set('status', 'true');
-    $settings->save(TRUE);
-
-    $settings = $config_factory->getEditable('flag.flag.subscribe_user');
-    $settings->set('status', 'true');
+    $settings->set('status', true);
     $settings->save(TRUE);
 
     $settings = $config_factory->getEditable('user.role.authenticated');
     $permissions = $settings->get('permissions');
     foreach ([
       'flag subscribe_node',
-      'flag subscribe_user',
       'unflag subscribe_node',
-      'unflag subscribe_user',
     ] as $perm) {
       if (!in_array($perm, $permissions)) {
         $permissions[] = $perm;
