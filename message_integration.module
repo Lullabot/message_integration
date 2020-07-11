@@ -15,16 +15,67 @@ use Drupal\message\Entity\Message;
 use Drupal\message_subscribe\Subscribers\DeliveryCandidate;
 use Drupal\Core\Asset\AttachedAssets;
 use TijsVerkoyen\CssToInlineStyles\CssToInlineStyles;
+use Drupal\Component\Utility\Html;
+use Drupal\Core\Render\Markup;
+use Drupal\Component\Render\MarkupInterface;
 
 /**
  * The content types whose changes should generate messages.
  */
-define('MESSAGE_INTEGRATION_CONTENT_TYPES', ['blog', 'book_page', 'yammer']);
+define('MESSAGE_INTEGRATION_CONTENT_TYPES', ['blog', 'book_page', 'policy_page', 'yammer']);
+
+/**
+ * Implementation of hook_cron().
+ *
+ * Fix repeating media error messages in email.
+ *
+ * The following error is repeated for every image sent in queued emails,
+ * once 20 images have been rendered.
+ *  - "During rendering of embedded media: recursive rendering detected..."
+ *
+ * The problem is core refuses to render the same image more than 20 times in
+ * one session, even if it's to create content for different users. This
+ * happens when emails are sent all at once during cron.
+ *
+ * The workaround is to use queue_throttle to limit the number of emails sent
+ * in a single session. After experimentation, more than 9 items sent at once
+ * may start to trigger errors.
+ *
+ * @see https://www.drupal.org/project/drupal/issues/2940605
+ */
+function message_integration_cron() {
+  $options = [
+    'items' => 9,
+    'unit' => 'minute',
+    'time-limit' => 30,
+  ];
+  \Drupal::service('queue_throttle.cron')->run('message_subscribe', $options);
+}
+
+/**
+ * Implements hook_swiftmailer_alter().
+ *
+ * Core fixes relative links in MailManager, but Swiftmailer sets the body too
+ * late. This is a workaround for a Swiftmailer issue. Without this, links in
+ * the emailed message are relative links, which don't work in email.
+ *
+ * @see https://www.drupal.org/project/swiftmailer/issues/3126636
+ */
+function message_integration_swiftmailer_alter(Swift_Mailer &$swiftMailer, Swift_Message &$swiftMessage, $message) {
+  if (!empty($message['params']['message_entity'])) {
+    $text = $swiftMessage->getBody();
+    if ($text instanceof MarkupInterface) {
+      $text = Markup::create(Html::transformRootRelativeUrlsToAbsolute((string) $text, \Drupal::request()->getSchemeAndHttpHost()));
+      $swiftMessage->setBody($text);
+    }
+  }
+}
 
 /**
  * Implemenation of hook_form_BASE_FORM_ID_alter().
  */
 function message_integration_form_node_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+
   // Provide a notification message for authors so they know what will happen.
   $form_object = $form_state->getFormObject();
   if ($form_object instanceof EntityForm) {
@@ -33,8 +84,7 @@ function message_integration_form_node_form_alter(&$form, FormStateInterface $fo
       // Add reminders about which actions will send messages.
       $form['title']['#suffix'] = '<div class="notification-message">' .
         t("Message notification is enabled.") . " " .
-        t("Active users will automatically be subscribed to new content, and may choose to unsubscribe at any time.") . " " .
-        t("Subscribers will automatically be notified when content is published, when new revisions are created, and when comments are added.") .
+        t("Users will automatically be notified when content is published and when comments are added.") .
         '</div>';
     }
   }
@@ -63,9 +113,9 @@ function message_integration_css() {
       '#attached' => [
         'library' => [
           'core/normalize',
-          'basis/global-styling',
-          'basis_dr/global-styling',
-          'basis_mail/global-styling',
+          'olivero/global-styling',
+          'olivero_dr/global-styling',
+          'olivero_mail/global-styling',
           'diff/diff.single_column',
           'diff/diff.colors',
           'diff/diff.general',
@@ -128,67 +178,43 @@ function message_integration_preprocess_field(&$variables) {
 }
 
 /**
- * Implements hook_message_subscribe_get_subscribers_alter().
- */
-function message_integration_message_subscribe_get_subscribers_alter(array &$uids, array $values) {
-  // Update each subscriber to use the only available delivery method, email.
-  // This is an easier alternative to using the message_subscribe_email module
-  // which requires every user to set both a 'subscribe' flag and also an
-  // 'email' flag on each item they want to subscribe to.
-  foreach ($uids as $uid => $delivery_candidate) {
-    $delivery_candidate->addNotifier('email');
-  }
-  return $uids;
-}
-
-/**
  * Implements hook_node_insert().
  */
 function message_integration_node_insert(Node $node) {
+
+  // See if this handling should be skipped.
+  $config = \Drupal::config('message_integration.settings');
+  $skip = $config->get('skip');
+  if (!empty($skip)) {
+    return;
+  }
 
   if (!in_array($node->bundle(), MESSAGE_INTEGRATION_CONTENT_TYPES)) {
     return;
   }
 
-  $subscribers = \Drupal::service('message_subscribe.subscribers');
-
-  // Automatically subscribe all active users to new content. They can
-  // unsubscribe later if they want to. This is one work-around to the fact
-  // that nobody can subscribe to content until it's published, so they won't
-  // otherwise get notified about new content. If a user account is later
-  // blocked, all flags will be removed by Flag module, so it's safe to set
-  // flags here for all currently active users.
-  $query = \Drupal::entityQuery('user')
-    ->condition('status', 1)
-    ->condition('uid', [0, 1], 'NOT IN');
-  $uids = $query->execute();
-  $users = User::loadMultiple($uids);
-
-  // Add a content subscription flag for each user.
-  // If there are a lot of users this should probably be queued, which would
-  // require more custom code. For now we'll assume the list is a manageable
-  // size.
-  $flag_service = \Drupal::service('flag');
-  $flag_id = 'subscribe_node';
-  $flag = $flag_service->getFlagById($flag_id);
-  foreach ($users as $account) {
-    // Check if already flagged to avoid exception error.
-    $flagging = $flag_service->getFlagging($flag, $node, $account);
-    if (!$flagging) {
-      $flag_service->flag($flag, $node, $account);
-    }
-  }
-
-  // Create a message.
-  $template = $node->isPublished() ? 'publish_node' : 'create_node';
-  $message = Message::create(['template' => $template, 'uid' => $node->getOwnerId()]);
-  $message->set('field_node_reference', $node);
-  $message->set('field_published', $node->isPublished());
-  $message->save();
-
-  // Queue messages to notify all the node subscribers about published node.
+  // If newly created node is published, queue messages to notify all the node
+  // subscribers about published node.
   if ($node->isPublished()) {
-    $subscribers->sendMessage($node, $message);
+    // Create a message.
+    $template = $node->isPublished() ? 'publish_node' : 'create_node';
+    $message = Message::create(['template' => $template, 'uid' => $node->getOwnerId()]);
+    $message->set('field_node_reference', $node);
+    $message->set('field_published', $node->isPublished());
+    $message->save();
+
+    $subscribers = \Drupal::service('message_subscribe.subscribers');
+
+    // Create a custom subscriber list to notify all active users.
+    // This is an end run around the normal flag subscription system since we
+    // don't want to subscribe every user to every piece of content.
+    $subscribe_options = message_integration_subscribe_options();
+    $options = $subscribe_options;
+    foreach ($subscribe_options['uids'] as $uid => $values) {
+      $options['uids'] = [$uid => $values];
+      $subscribers->sendMessage($node, $message, [], $options);
+    }
+
   }
 
 }
@@ -197,17 +223,35 @@ function message_integration_node_insert(Node $node) {
  * Implements hook_node_update().
  */
 function message_integration_node_update(Node $node) {
+
+  // See if this handling should be skipped.
+  $config = \Drupal::config('message_integration.settings');
+  $skip = $config->get('skip');
+  if (!empty($skip)) {
+    return;
+  }
+
+  // If this isn't a content type that we create messages for, do nothing.
   if (!in_array($node->bundle(), MESSAGE_INTEGRATION_CONTENT_TYPES)) {
     return;
   }
 
-  $subscribers = \Drupal::service('message_subscribe.subscribers');
+  // If we're not updating the default revision, do nothing.
+  if (!$node->isDefaultRevision()) {
+    return;
+  }
 
   // Match publication status of message to status of source entity.
   message_integration_update_message_status($node);
 
+  // If the node is not published, do nothing more.
+  if (!$node->isPublished()) {
+    return;
+  }
+
   // See if this is a newly-published node.
-  if ($node->isPublished() && !empty($node->original) && !$node->original->isPublished()) {
+  $original = !empty($node->original) ? $node->original : $node;
+  if ($node->isPublished() && !$original->isPublished()) {
     $template = 'publish_node';
     $newly_published = TRUE;
   }
@@ -225,7 +269,7 @@ function message_integration_node_update(Node $node) {
     $new_revision = FALSE;
   }
   else {
-    $original_vid = !empty($node->original) ? $node->original->vid->value : $node->vid->value;
+    $original_vid = $original->vid->value;
     $new_revision = $original_vid != $new_vid ? TRUE : FALSE;
   }
   // If this is a new revision where nothing changed and it wasn't published,
@@ -252,7 +296,17 @@ function message_integration_node_update(Node $node) {
   }
   $message->save();
 
-  $subscribers->sendMessage($node, $message);
+  $subscribers = \Drupal::service('message_subscribe.subscribers');
+
+  // Create a custom subscriber list to notify all active users.
+  // This is an end run around the normal flag subscription system since we
+  // don't want to subscribe every user to every piece of content.
+  $subscribe_options = message_integration_subscribe_options();
+  $options = $subscribe_options;
+  foreach ($subscribe_options['uids'] as $uid => $values) {
+    $options['uids'] = [$uid => $values];
+    $subscribers->sendMessage($node, $message, [], $options);
+  }
 
 }
 
@@ -260,7 +314,13 @@ function message_integration_node_update(Node $node) {
  * Implements hook_comment_insert().
  */
 function message_integration_comment_insert(Comment $comment) {
-  $subscribers = \Drupal::service('message_subscribe.subscribers');
+
+  // See if this handling should be skipped.
+  $config = \Drupal::config('message_integration.settings');
+  $skip = $config->get('skip');
+  if (!empty($skip)) {
+    return;
+  }
 
   $node = $comment->get('entity_id')->first()->get('entity')->getTarget()->getValue();
   if (!in_array($node->bundle(), MESSAGE_INTEGRATION_CONTENT_TYPES)) {
@@ -277,58 +337,18 @@ function message_integration_comment_insert(Comment $comment) {
   $message->save();
 
   // Queue messages to notify all the node subscribers about new comment.
-  $subscribers->sendMessage($comment, $message);
-
-}
-
-/**
- * Implements hook_user_insert().
- */
-function message_integration_user_insert(User $account) {
   $subscribers = \Drupal::service('message_subscribe.subscribers');
 
-  // Create a custom subscriber list to notify administrators about new users.
+  // Create a custom subscriber list to notify all active users.
   // This is an end run around the normal flag subscription system since we
-  // don't want to subscribe to users but we do want administrators notified.
-  $subscribe_options = message_integration_subscriber_list_by_roles(['admin']);
-
-  // Queue messages to our custom list of subscribers.
-  $message = Message::create(['template' => 'user_register', 'uid' => $account->id()]);
-  $message->set('field_user', $account);
-  $message->set('field_published', $account->isActive());
-  $message->save();
-
-  $subscribers->sendMessage($account, $message, [], $subscribe_options);
-}
-
-/**
- * Helper to create custom subscriber list.
- *
- * Hard-coding 'uids' in $subscribe_options will cause message_subscribe to
- * skip other subscribers and send to just this list, so this allows us
- * to create a custom subscription list.
- *
- * @param array $roles
- *   Array of roles to search for.
- *
- * @return array
- *   Array of subscribe_options to use when sending the message.
- */
-function message_integration_subscriber_list_by_roles(array $roles = ['admin']) {
-  $query = \Drupal::entityQuery('user')
-    ->condition('status', 1);
-  $query->condition('roles', $roles, 'IN');
-  $admin_uids = $query->execute();
-
-  $notifiers = ['email'];
-  $subscribe_options = [
-    'notify message owner' => FALSE,
-    'uids' => [],
-  ];
-  foreach ($admin_uids as $uid) {
-    $subscribe_options['uids'][$uid] = new DeliveryCandidate([], $notifiers, $uid);
+  // don't want to subscribe every user to every piece of content.
+  $subscribe_options = message_integration_subscribe_options();
+  $options = $subscribe_options;
+  foreach ($subscribe_options['uids'] as $uid => $values) {
+    $options['uids'] = [$uid => $values];
+    $subscribers->sendMessage($node, $message, [], $options);
   }
-  return $subscribe_options;
+
 }
 
 /**
@@ -355,4 +375,31 @@ function message_integration_update_message_status(ContentEntityBase $entity) {
     $message->set('field_published', $entity->isPublished());
     $message->save();
   }
+}
+
+/**
+ * Helper to create custom subscriber list.
+ *
+ * Hard-coding 'uids' in $subscribe_options will cause message_subscribe to
+ * skip other subscribers and send to just this list, so this allows us
+ * to create a custom subscription list.
+ *
+ * @return array
+ *   Array of subscribe_options to use when sending the message.
+ */
+function message_integration_subscribe_options() {
+  $query = \Drupal::entityQuery('user')
+    ->condition('status', 1);
+  $query->condition('uid', [0, 1], 'NOT IN');
+  $subscribe_uids = $query->execute();
+
+  $notifiers = ['email'];
+  $subscribe_options = [
+    'notify message owner' => FALSE,
+    'uids' => [],
+  ];
+  foreach ($subscribe_uids as $uid) {
+    $subscribe_options['uids'][$uid] = new DeliveryCandidate([], $notifiers, $uid);
+  }
+  return $subscribe_options;
 }

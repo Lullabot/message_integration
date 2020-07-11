@@ -36,8 +36,7 @@ The logic used for subscribing users to content and sending them emails
 This code is too opinionated to use as a normal contributed module. But you
  you can fork it, adjust it to your own needs, and use it elsewhere.
 
-To use this on your own site, fork this code, then add the forked repository
- to your site's composer.json.
+To use this on your own site, fork this code, then add the requirements and patches in composer.json to your primary composer.json.
 
 ```
     "repositories": {
@@ -53,6 +52,7 @@ To use this on your own site, fork this code, then add the forked repository
     },
 
 ```
+
 
 - Make sure all the required code (with patches) is available by running
  `composer require forked-repo/message_integration`.

@@ -13,6 +13,7 @@ dependencies:
   - diff:diff
   - swiftmailer:swiftmailer
   - mailsystem:mailsystem
+  - queue_throttle:queue_throttle
   - token:token
   - drupal:node
   - drupal:comment

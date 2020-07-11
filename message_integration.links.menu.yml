@@ -1,0 +1,6 @@
+message_integration.settings_form:
+  title: 'Message integration settings'
+  route_name: message_integration.settings_form
+  description: 'Administer message integration'
+  parent: message.main_settings
+  weight: 99
