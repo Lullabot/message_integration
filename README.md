@@ -27,8 +27,6 @@ The logic used for subscribing users to content and sending them emails
 - When new comments are added, the code will notify the users subscribed to the
  node. The email will display the `compact` view mode of the content and the
  `default` view mode of the new comment an HTML email.
-- Admin users will be notified by email when new users register, using a custom
- mailing list instead of the usual subscription model.
 
 ## To install on a new site:
 
