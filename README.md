@@ -18,8 +18,7 @@ The logic used for subscribing users to content and sending them emails
  includes the following. See `message_integration.module` and the message
  templates for more details.
 
-- All active users will automatically be subscribed to all new content. They
- can later unsubscribe if they want.
+- All active users will automatically be sent all new content.
 - When a node is first published, the code will render the `message` view mode
  of the node in an HTML email and send it to the subscriber list.
 - When a new revision is created in a published node, the code will use Diff
@@ -61,9 +60,7 @@ To use this on your own site, fork this code, then add the requirements and patc
 - Lots of tweaky little steps can't be done until after everything is
  installed. Do them by running `drush message_integration:configure` after
  enabling the modules.
-- Edit the display mode for each content type to position the subscription flag
- where you want it on the `default` view mode of your content nodes, then
- enable the `message` view mode to control the display that will be rendered
+- Enable the `message` view mode to control the display that will be rendered
  in messages.
 - Subscribe to some content.
 - Create/edit content and add comments to it.
