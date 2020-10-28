@@ -5,28 +5,29 @@
     "keywords": ["Drupal"],
     "homepage": "https://github.com/lullabot/message_integration",
     "require": {
-        "drupal/core": "^8.6",
+        "drupal/core": "^8.6 || ^9.0",
         "drupal/message": "^1.0",
         "drupal/message_notify": "^1.1",
         "drupal/message_subscribe": "^1.0",
-        "drupal/message_ui": "^1.0@beta",
         "drupal/diff": "^1.0",
-        "drupal/swiftmailer": "^1.0@beta",
+        "drupal/swiftmailer": "^1.0@beta || ^2.0@beta",
         "tijsverkoyen/css-to-inline-styles": "^2.2"
     },
     "extra": {
         "patches": {
             "drupal/message_subscribe": {
                 "Issue #2928789: Fatal exception with flag module": "https://www.drupal.org/files/issues/2019-12-15/account_id_2928789_0.patch",
-                "Issue #3101137: Fix endless loop": "https://www.drupal.org/files/issues/2019-12-15/3101137-fix-endless-loop.patch"
+                "Issue #3101137: Fix endless loop": "https://www.drupal.org/files/issues/2019-12-15/3101137-fix-endless-loop.patch",
+                "Issue #3128876: Drupal 9 compatibility": "https://www.drupal.org/files/issues/2020-09-30/3128876-4.patch"
             },
             "drupal/message_notify": {
+                "Issue #3120194: Drupal 9 compatibility": "https://www.drupal.org/files/issues/2020-07-10/3120194-4.patch",
                 "Issue #3111355: Switch user to recipient before rendering": "https://www.drupal.org/files/issues/2020-02-06/3111355-switch-user_5.patch"
             }
         },
         "drush": {
             "services": {
-                "drush.services.yml": "^9"
+                "drush.services.yml": "^10"
             }
         }
     }

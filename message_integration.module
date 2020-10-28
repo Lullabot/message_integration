@@ -22,7 +22,7 @@ use Drupal\Component\Render\MarkupInterface;
 /**
  * The content types whose changes should generate messages.
  */
-define('MESSAGE_INTEGRATION_CONTENT_TYPES', ['blog', 'book_page', 'policy_page', 'yammer']);
+define('MESSAGE_INTEGRATION_CONTENT_TYPES', ['blog', 'book_page', 'policy_page']);
 
 /**
  * Implementation of hook_cron().
