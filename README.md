@@ -1,5 +1,7 @@
 # Custom Message Implementation
 
+_This project has been moved to https://www.drupal.org/project/message_integration._
+
 Custom code for Message stack and Swiftmailer to create messages about
  new/changed nodes and comments and email them to subscribers.
 
